@@ -227,11 +227,44 @@
             margin-top: 15px;
             text-shadow: 0 0 5px rgba(255,0,255,0.5);
         }
+
+        /* CRT Effect */
+        .crt-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .crt-overlay::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: rgba(18, 16, 16, 0.03);
+            opacity: 0;
+            z-index: 5;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.01; }
+            50% { opacity: 0.02; }
+            100% { opacity: 0.01; }
+        }
     </style>
 </head>
 <body>
     <div class="game-container">
         <canvas id="gameCanvas"></canvas>
+        <div class="crt-overlay"></div>
         
         <div class="ui">
             <div class="stats-container">
@@ -252,8 +285,8 @@
         <div id="levelAlert" class="level-alert">المستوى 2!</div>
         
         <div class="controls">
-            <div class="control-btn" id="leftBtn"><i class="fas fa-chevron-right"></i></div>
-            <div class="control-btn" id="rightBtn"><i class="fas fa-chevron-left"></i></div>
+            <div class="control-btn" id="leftBtn"><i class="fas fa-chevron-left"></i></div>
+            <div class="control-btn" id="rightBtn"><i class="fas fa-chevron-right"></i></div>
         </div>
         
         <div class="menu" id="menu">
@@ -404,7 +437,20 @@
         const player = { x: 0, y: 0, width: 40, height: 70, speedX: 0, maxSpeedX: 7, tilt: 0 };
         let obstacles = [];
         let particles = [];
+        let stars = [];
         let keys = { left: false, right: false, boost: false };
+
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < 100; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height * 0.6,
+                    size: Math.random() * 2,
+                    speed: Math.random() * 0.5 + 0.1
+                });
+            }
+        }
 
         function resize() {
             const container = canvas.parentElement;
@@ -417,6 +463,7 @@
             roadRight = roadLeft + laneWidth * 3;
             player.y = height - 120;
             if (!gameActive) player.x = width / 2;
+            initStars();
         }
 
         window.addEventListener('resize', resize);
@@ -473,107 +520,218 @@
                 particles.push({
                     x: x, y: y,
                     vx: (Math.random() - 0.5) * (type === 'crash' ? 15 : 4),
-                    vy: (Math.random() - 0.5) * (type === 'crash' ? 15 : 4) + (type === 'exhaust' ? 5 : 0),
+                    vy: (Math.random() - 0.5) * (type === 'crash' ? 15 : 4) + (type === 'exhaust' ? 2 : 0),
                     life: 1,
                     color: color,
-                    size: Math.random() * (type === 'crash' ? 6 : 3) + 2,
-                    type: type
+                    size: Math.random() * (type === 'crash' ? 8 : 4) + 1,
+                    type: type,
+                    glow: type === 'exhaust' || type === 'crash'
                 });
             }
         }
 
         // --- دوال الرسم ---
-        function drawRoad() {
-            // الخلفية
-            ctx.fillStyle = currentLevelData.bg;
-            ctx.fillRect(0, 0, width, height);
-            
-            // الطريق
-            ctx.fillStyle = currentLevelData.road;
-            ctx.fillRect(roadLeft, 0, laneWidth * 3, height);
-            
-            // تأثير التوهج للخطوط
-            ctx.shadowBlur = 10;
-            
-            // خطوط المسار (متقطعة)
-            ctx.shadowColor = currentLevelData.line;
-            ctx.strokeStyle = currentLevelData.line;
-            ctx.lineWidth = 3;
-            ctx.setLineDash([40, 40]);
-            ctx.lineDashOffset = -roadOffset;
-            
-            for (let i = 1; i < 3; i++) {
+        function drawBackground() {
+            // السماء
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, height * 0.6);
+            skyGradient.addColorStop(0, '#050510');
+            skyGradient.addColorStop(1, currentLevelData.bg);
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, width, height * 0.6);
+
+            // النجوم
+            ctx.fillStyle = '#fff';
+            stars.forEach(star => {
+                ctx.globalAlpha = 0.5 + Math.random() * 0.5;
                 ctx.beginPath();
-                ctx.moveTo(roadLeft + laneWidth * i, 0);
-                ctx.lineTo(roadLeft + laneWidth * i, height);
+                ctx.arc(star.x, (star.y + roadOffset * star.speed) % (height * 0.6), star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // شمس النيون (Synthwave Sun)
+            const sunY = height * 0.35;
+            const sunRadius = 80;
+            const sunGradient = ctx.createLinearGradient(0, sunY - sunRadius, 0, sunY + sunRadius);
+            sunGradient.addColorStop(0, '#ff00ff');
+            sunGradient.addColorStop(1, '#ffcc00');
+            
+            ctx.save();
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = '#ff00ff';
+            ctx.fillStyle = sunGradient;
+            ctx.beginPath();
+            ctx.arc(width / 2, sunY, sunRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // خطوط الشمس
+            ctx.fillStyle = currentLevelData.bg;
+            for (let i = 0; i < 6; i++) {
+                const h = 2 + i * 2;
+                ctx.fillRect(width / 2 - sunRadius, sunY + 10 + i * 15, sunRadius * 2, h);
+            }
+
+            // الجبال البعيدة
+            ctx.fillStyle = '#0a0a20';
+            ctx.beginPath();
+            ctx.moveTo(0, height * 0.6);
+            ctx.lineTo(width * 0.2, height * 0.45);
+            ctx.lineTo(width * 0.4, height * 0.6);
+            ctx.lineTo(width * 0.7, height * 0.4);
+            ctx.lineTo(width, height * 0.6);
+            ctx.fill();
+        }
+
+        function drawRoad() {
+            const horizon = height * 0.6;
+            const roadWidthBottom = width * 1.2;
+            const roadWidthTop = 40;
+            
+            // أرضية تحت الطريق
+            ctx.fillStyle = '#050510';
+            ctx.fillRect(0, horizon, width, height - horizon);
+
+            // رسم الطريق بمنظور 3D (Trapezoid)
+            ctx.save();
+            
+            // تأثير التوهج للشبكة
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = currentLevelData.edge;
+
+            // رسم الشبكة الأرضية
+            ctx.strokeStyle = currentLevelData.edge;
+            ctx.globalAlpha = 0.2;
+            ctx.lineWidth = 1;
+            
+            // خطوط أفقية متجهة للداخل (المنظور)
+            let gridY = (roadOffset * 2) % 60;
+            for (let i = 0; i < 20; i++) {
+                const currY = horizon + (i * 40) - gridY;
+                if (currY < horizon) continue;
+                const ratio = (currY - horizon) / (height - horizon);
+                const currentWidth = roadWidthTop + ratio * (roadWidthBottom - roadWidthTop);
+
+                ctx.beginPath();
+                ctx.moveTo(width / 2 - currentWidth / 2, currY);
+                ctx.lineTo(width / 2 + currentWidth / 2, currY);
                 ctx.stroke();
             }
-            ctx.setLineDash([]);
-            
-            // حواف الطريق
-            ctx.shadowColor = currentLevelData.edge;
-            ctx.strokeStyle = currentLevelData.edge;
-            ctx.lineWidth = 5;
-            ctx.beginPath(); ctx.moveTo(roadLeft, 0); ctx.lineTo(roadLeft, height); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(roadRight, 0); ctx.lineTo(roadRight, height); ctx.stroke();
-            
-            ctx.shadowBlur = 0; // إعادة ضبط
-            
-            // تأثير الخطوط الجانبية السريعة (Grid effect)
-            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-            ctx.lineWidth = 1;
-            let gridY = roadOffset % 50;
-            while(gridY < height) {
+
+            // خطوط طولية متجهة لنقطة التلاشي
+            for (let i = -5; i <= 5; i++) {
                 ctx.beginPath();
-                ctx.moveTo(0, gridY); ctx.lineTo(roadLeft, gridY + 20);
-                ctx.moveTo(width, gridY); ctx.lineTo(roadRight, gridY + 20);
+                ctx.moveTo(width / 2 + i * 20, horizon);
+                ctx.lineTo(width / 2 + i * 200, height);
                 ctx.stroke();
-                gridY += 50;
+            }
+
+            // الطريق الفعلي (نيون)
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 15;
+
+            // حواف الطريق النيون
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(width / 2 - 20, horizon);
+            ctx.lineTo(roadLeft - 50, height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(width / 2 + 20, horizon);
+            ctx.lineTo(roadRight + 50, height);
+            ctx.stroke();
+
+            ctx.restore();
+
+            // خطوط السرعة الجانبية (Level 3+)
+            if (currentLevel >= 3) {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.3;
+                for (let i = 0; i < 5; i++) {
+                    const ly = (roadOffset * 5 + i * 200) % height;
+                    ctx.beginPath();
+                    ctx.moveTo(20, ly); ctx.lineTo(20, ly + 50);
+                    ctx.moveTo(width - 20, ly); ctx.lineTo(width - 20, ly + 50);
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
             }
         }
 
         function drawMotorcycle(x, y, tilt) {
             ctx.save();
             ctx.translate(x, y);
-            ctx.rotate(tilt * 0.15);
+            ctx.rotate(tilt * 0.2);
             
-            // توهج خلفي
+            // ضوء أمامي (Projection)
+            const headLightGradient = ctx.createRadialGradient(0, -40, 0, 0, -150, 100);
+            headLightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+            headLightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = headLightGradient;
+            ctx.beginPath();
+            ctx.moveTo(-20, -40);
+            ctx.lineTo(20, -40);
+            ctx.lineTo(60, -180);
+            ctx.lineTo(-60, -180);
+            ctx.close();
+            ctx.fill();
+
+            // الجسم المعدني
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#0ff';
             
-            // الجسم الأساسي
-            ctx.fillStyle = '#111';
+            // هيكل الدراجة
+            ctx.fillStyle = '#1a1a1a';
             ctx.beginPath();
-            ctx.roundRect(-12, -30, 24, 60, 5);
+            ctx.moveTo(-10, -35);
+            ctx.lineTo(10, -35);
+            ctx.lineTo(15, 0);
+            ctx.lineTo(12, 35);
+            ctx.lineTo(-12, 35);
+            ctx.lineTo(-15, 0);
+            ctx.close();
             ctx.fill();
 
-            ctx.shadowBlur = 0;
-
-            // تفاصيل نيون
+            // خزان الوقود نيون
             ctx.fillStyle = '#0ff';
-            ctx.fillRect(-8, -25, 16, 20); // الخزان
-            
-            ctx.fillStyle = '#f0f';
-            ctx.fillRect(-6, 0, 12, 15); // المقعد
-
-            // العجلات
-            ctx.fillStyle = '#050505';
-            ctx.fillRect(-6, -40, 12, 15); // أمامي
-            ctx.fillRect(-8, 25, 16, 18);  // خلفي
-            
-            // إضاءة العجلات
-            ctx.fillStyle = '#0ff';
-            ctx.fillRect(-2, -38, 4, 10); 
-            ctx.fillStyle = '#f0f';
-            ctx.fillRect(-2, 28, 4, 12);
-
-            // إضاءة أمامية
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = '#fff';
-            ctx.fillStyle = '#fff';
             ctx.beginPath();
-            ctx.arc(0, -35, 4, 0, Math.PI * 2);
+            ctx.ellipse(0, -15, 8, 15, 0, 0, Math.PI * 2);
             ctx.fill();
+            
+            // المقعد
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.roundRect(-7, 5, 14, 18, 4);
+            ctx.fill();
+
+            // المحرك وتفاصيل ميكانيكية
+            ctx.fillStyle = '#444';
+            ctx.fillRect(-8, -5, 16, 10);
+            
+            // العجلات مع توهج نيون
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-5, -45, 10, 15); // أمامي
+            ctx.fillRect(-7, 30, 14, 20);  // خلفي
+
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-5, -45, 10, 15);
+            ctx.strokeRect(-7, 30, 14, 20);
+
+            // المقابض
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-15, -25); ctx.lineTo(15, -25);
+            ctx.stroke();
+
+            // ضوء الفرامل خلفي
+            ctx.shadowColor = '#f00';
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(-5, 32, 10, 4);
 
             ctx.restore();
         }
@@ -582,57 +740,72 @@
             ctx.save();
             ctx.translate(obs.x, obs.y);
             
-            // ظل وتوهج
-            ctx.shadowBlur = 10;
+            // توهج نيون للسيارة
+            ctx.shadowBlur = 15;
             ctx.shadowColor = obs.color;
             
-            // الجسم الأساسي
-            ctx.fillStyle = '#111';
+            // هيكل السيارة الرئيسي
+            ctx.fillStyle = '#0a0a0a';
             ctx.beginPath();
-            ctx.roundRect(-obs.width/2, -obs.height/2, obs.width, obs.height, 8);
+            ctx.roundRect(-obs.width/2, -obs.height/2, obs.width, obs.height, 10);
             ctx.fill();
 
-            // الطلاء الخارجي (نيون)
+            // خطوط نيون زينة
             ctx.strokeStyle = obs.color;
             ctx.lineWidth = 2;
-            ctx.stroke();
-            
-            ctx.shadowBlur = 0;
+            ctx.strokeRect(-obs.width/2 + 2, -obs.height/2 + 2, obs.width - 4, obs.height - 4);
 
-            // الزجاج
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+            // الزجاج الأمامي والخلفي
+            const glassColor = 'rgba(0, 255, 255, 0.4)';
+            ctx.fillStyle = glassColor;
+            // أمام
             ctx.beginPath();
-            ctx.roundRect(-obs.width/2 + 4, -obs.height/2 + 10, obs.width - 8, obs.height * 0.25, 3);
+            ctx.moveTo(-obs.width/2 + 5, -obs.height/4);
+            ctx.lineTo(obs.width/2 - 5, -obs.height/4);
+            ctx.lineTo(obs.width/2 - 8, -obs.height/2 + 15);
+            ctx.lineTo(-obs.width/2 + 8, -obs.height/2 + 15);
+            ctx.close();
             ctx.fill();
             
-            ctx.beginPath();
-            ctx.roundRect(-obs.width/2 + 4, obs.height/2 - 20, obs.width - 8, obs.height * 0.15, 3);
-            ctx.fill();
+            // خلف
+            ctx.fillRect(-obs.width/2 + 6, obs.height/2 - 20, obs.width - 12, 10);
 
-            // أضواء خلفية
-            ctx.fillStyle = '#f00';
-            ctx.shadowBlur = 5;
+            // أضواء أمامية نيون
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#fff';
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-obs.width/2 + 4, -obs.height/2 + 2, 8, 4);
+            ctx.fillRect(obs.width/2 - 12, -obs.height/2 + 2, 8, 4);
+
+            // أضواء خلفية حمراء
             ctx.shadowColor = '#f00';
-            ctx.fillRect(-obs.width/2 + 2, obs.height/2 - 4, 10, 4);
-            ctx.fillRect(obs.width/2 - 12, obs.height/2 - 4, 10, 4);
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(-obs.width/2 + 4, obs.height/2 - 6, 10, 4);
+            ctx.fillRect(obs.width/2 - 14, obs.height/2 - 6, 10, 4);
+
+            // سقف السيارة (خطوط توحي بالتفاصيل)
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.beginPath();
+            ctx.moveTo(-obs.width/2 + 10, 0); ctx.lineTo(obs.width/2 - 10, 0);
+            ctx.stroke();
 
             ctx.restore();
         }
 
         function drawParticles() {
+            ctx.save();
             for (let p of particles) {
                 ctx.globalAlpha = p.life;
                 ctx.fillStyle = p.color;
-                if(p.type === 'exhaust') {
-                    ctx.shadowBlur = 5;
+                if(p.glow) {
+                    ctx.shadowBlur = 10;
                     ctx.shadowColor = p.color;
                 }
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
                 ctx.fill();
             }
-            ctx.globalAlpha = 1;
-            ctx.shadowBlur = 0;
+            ctx.restore();
         }
 
         function checkLevelUp() {
@@ -666,10 +839,10 @@
 
             // التحكم باللاعب
             if (keys.left) {
-                player.speedX = Math.min(player.speedX + 0.6 * timeFactor, player.maxSpeedX);
+                player.speedX = Math.max(player.speedX - 0.6 * timeFactor, -player.maxSpeedX);
                 player.tilt = Math.max(player.tilt - 0.1 * timeFactor, -1);
             } else if (keys.right) {
-                player.speedX = Math.max(player.speedX - 0.6 * timeFactor, -player.maxSpeedX);
+                player.speedX = Math.min(player.speedX + 0.6 * timeFactor, player.maxSpeedX);
                 player.tilt = Math.min(player.tilt + 0.1 * timeFactor, 1);
             } else {
                 player.speedX *= 0.85;
@@ -738,6 +911,7 @@
 
         function render() {
             ctx.clearRect(0, 0, width, height);
+            drawBackground();
             drawRoad();
             drawParticles();
             
@@ -813,9 +987,8 @@
             btn.addEventListener('mouseleave', (e) => { e.preventDefault(); keys[keyProp] = false; });
         };
         
-        // الأزرار مقلوبة لأن اتجاه الصفحة RTL (اليمين هو السهم الأيمن، لكنه يحرك لليمين منطقياً)
-        setupTouch(document.getElementById('rightBtn'), 'right'); 
         setupTouch(document.getElementById('leftBtn'), 'left');
+        setupTouch(document.getElementById('rightBtn'), 'right');
 
         startBtn.addEventListener('click', startGame);
         restartBtn.addEventListener('click', startGame);
